@@ -94,4 +94,4 @@ def main():
 # Run the Streamlit app
 if __name__ == "__main__":
     main()
-##run with command streamlit run demo.py --client.showErrorDetails=false to remove cache error message on streamlit interface
+##run with command streamlit run main.py --client.showErrorDetails=false to remove cache error message on streamlit interface
