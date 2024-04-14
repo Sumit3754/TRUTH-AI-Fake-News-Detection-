@@ -96,4 +96,5 @@ def main():
 # Run the Streamlit app
 if __name__ == "__main__":
     main()
+st.markdown("**Created with enthusiasm by SuperSam**")
 ##run with command streamlit run main.py --client.showErrorDetails=false to remove cache error message on streamlit interface
