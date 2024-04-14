@@ -1,4 +1,4 @@
-# Fake News Detection App
+# Fake News Detection Webapp
 
 ## Description
 
