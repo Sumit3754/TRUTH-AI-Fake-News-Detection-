@@ -43,3 +43,6 @@ This Streamlit app is designed to detect whether a news article is likely fake o
 - Input a news article into the text area.
 - Select a vectorizer and classifier from the sidebar.
 - Click the "Check" button to see the prediction result.
+
+<img width="959" alt="image" src="https://github.com/SmridhVarma/Fake-News-Detection/assets/103480022/532e7401-1562-4369-aa90-35bfed044767">
+
