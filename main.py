@@ -6,6 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.svm import LinearSVC
 from sklearn.naive_bayes import MultinomialNB
 import warnings
+import streamlit_lottie
 warnings.filterwarnings("ignore")
 
 # Module 2: Load the dataset
@@ -51,7 +52,8 @@ def main():
     
     # Streamlit app
     st.title(page_title + " " + page_icon)
-    
+    st.lottie("https://lottie.host/bd0c4818-c5a6-4e42-b407-746bc448c2c7/ipVUdgFncO.json", width=200, height=200)
+
     # --- HIDE STREAMLIT STYLE ---
     hide_st_style = """
     <style>
