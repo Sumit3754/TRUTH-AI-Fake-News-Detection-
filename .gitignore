@@ -1,11 +1,42 @@
-# Ignore everything
-*
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
 
-# But don't ignore the CSV file we want to push
+# Virtual environment
+venv/
+env/
+ENV/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Model files (large files)
+*.pkl
+*.joblib
+*.h5
+*.model
+
+# Streamlit secrets - ADD THIS LINE
+.streamlit/secrets.toml
+
+# Data files (if large)
+# *.csv
+
+# But include these important files
 !fake_or_real_news.csv
-
-# Don't ignore .gitignore itself
+!*.py
+!*.md
+!requirements.txt
+!Dockerfile
 !.gitignore
-
-# Don't ignore .gitattributes
 !.gitattributes
