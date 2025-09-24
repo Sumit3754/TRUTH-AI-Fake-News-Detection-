@@ -321,3 +321,61 @@ if __name__ == "__main__":
     """
     results = analyzer.analyze_text(test_text, "LIKELY_REAL")
     print(json.dumps(results, indent=2))
+# Legacy function for backward compatibility
+def analyze_text_with_gemini(text: str) -> Dict:
+    """
+    Legacy function for backward compatibility with existing code
+    """
+    analyzer = GeminiAnalyzer()
+    if hasattr(analyzer, 'is_configured') and analyzer.is_configured:
+        result = analyzer.analyze_text(text)
+        return {
+            'analysis': result.get('summary', 'Analysis completed'),
+            'confidence_score': result.get('confidence_score', 50) / 100.0,  # Convert to 0-1 range
+            'educational_insight': '\n'.join(result.get('educational_insights', ['General analysis completed']))
+        }
+    else:
+        return {
+            'analysis': 'Gemini API not configured',
+            'confidence_score': 0.0,
+            'educational_insight': 'Please configure Gemini API key'
+        }
+
+
+def list_available_models():
+    """List all available Gemini models"""
+    try:
+        api_key = os.getenv('GEMINI_API_KEY') or st.secrets.get('GEMINI_API_KEY')
+        if not api_key:
+            return False, "No API key found"
+
+        genai.configure(api_key=api_key)
+        models = genai.list_models()
+
+        available_models = []
+        for model in models:
+            if 'generateContent' in model.supported_generation_methods:
+                available_models.append(model.name)
+
+        return True, available_models
+    except Exception as e:
+        return False, f"Error listing models: {str(e)}"
+
+
+def test_gemini_connection():
+    """Test if Gemini API is working"""
+    try:
+        analyzer = GeminiAnalyzer()
+        if hasattr(analyzer, 'is_configured') and analyzer.is_configured:
+            try:
+                response = analyzer.model.generate_content("Say 'Hello, Gemini is working!' and nothing else.")
+                if response and response.text:
+                    return True, f"✅ {response.text.strip()}"
+                else:
+                    return False, "Empty response from Gemini"
+            except Exception as e:
+                return False, f"API call failed: {str(e)}"
+        else:
+            return False, "Gemini model not properly initialized"
+    except Exception as e:
+        return False, f"Initialization failed: {str(e)}"
