@@ -4,17 +4,18 @@ import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
 from sklearn.svm import LinearSVC
+from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
 import warnings
-import streamlit_lottie
 from gemini_integration import analyze_text_with_gemini, test_gemini_connection, GeminiAnalyzer, display_gemini_results, list_available_models
 warnings.filterwarnings("ignore")
 
-# Module 2: Load the dataset
-@st.cache
+# Module 2: Load the dataset - FIXED
+@st.cache_data
 def load_data():
     data = pd.read_csv("fake_or_real_news.csv")
-    data['fake'] = data['label'].apply(lambda x: 0 if x == 'REAL' else 1)
+    # FIXED: Correct labeling - FAKE = 1, REAL = 0
+    data['fake'] = data['label'].apply(lambda x: 1 if x == 'FAKE' else 0)
     return data
 
 # Module 3: Select Vectorizer and Classifier
@@ -36,11 +37,38 @@ def select_model():
     
     return vectorizer, classifier
 
-# Module 4: Train the model
-def train_model(data, vectorizer, classifier):
-    x_vectorized = vectorizer.fit_transform(data['text'])
-    classifier.fit(x_vectorized, data['fake'])
-    return vectorizer, classifier
+# Module 4: Train the model - FIXED
+@st.cache_data
+def train_model(data, _vectorizer, _classifier):
+    """
+    Train model with proper train/test split
+    Args:
+        data: DataFrame with text and labels
+        _vectorizer: Vectorizer instance (prefix _ to avoid caching issues)
+        _classifier: Classifier instance (prefix _ to avoid caching issues)
+    Returns:
+        fitted_vectorizer, fitted_classifier, accuracy
+    """
+    # Split dataset into train and test
+    X_train, X_test, y_train, y_test = train_test_split(
+        data['text'], 
+        data['fake'], 
+        test_size=0.2, 
+        random_state=42,
+        stratify=data['fake']  # Ensures balanced split
+    )
+    
+    # Fit vectorizer ONLY on training data
+    X_train_vectorized = _vectorizer.fit_transform(X_train)
+    
+    # Train classifier on training data
+    _classifier.fit(X_train_vectorized, y_train)
+    
+    # Calculate accuracy on test set
+    X_test_vectorized = _vectorizer.transform(X_test)
+    accuracy = _classifier.score(X_test_vectorized, y_test)
+    
+    return _vectorizer, _classifier, accuracy
 
 # Module 5: Streamlit app
 def main():
@@ -573,11 +601,18 @@ def main():
     # Theme toggle in sidebar for mobile
     with st.sidebar:
         theme_icon = "🌙" if st.session_state.dark_mode else "☀️"
-        theme_text = "Dark Mode" if st.session_state.dark_mode else "Light Mode"
         if st.button(f"{theme_icon} Switch to {'Light' if st.session_state.dark_mode else 'Dark'} Mode"):
             st.session_state.dark_mode = not st.session_state.dark_mode
             st.rerun()
         
+        st.markdown("---")
+        st.markdown("### 🔧 API Status")
+        if st.button("Test Gemini Connection"):
+            success, message = test_gemini_connection()
+            if success:
+                st.success(message)
+            else:
+                st.error(message)
     
     # Apply theme based on session state
     theme_class = "" if st.session_state.dark_mode else 'data-theme="light"'
@@ -643,7 +678,6 @@ def main():
             </div>
         </div>
         """, unsafe_allow_html=True)
-        st.warning("⚠️ Video file 'truth-vid.mp4' not found. Using gradient background instead.")
     
     # Add JavaScript for theme functionality
     theme_js = f"""
@@ -767,251 +801,32 @@ def main():
         st.session_state.user_input = ""
     if 'analysis_count' not in st.session_state:
         st.session_state.analysis_count = 0
+    if 'model_accuracy' not in st.session_state:
+        st.session_state.model_accuracy = None
 
     # Center the check button
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         check_button = st.button("🔍 Analyze Article", use_container_width=True)
 
-    # When user submits the input
+    # When user submits the input - FIXED
     if check_button and user_input.strip():
         st.session_state.user_input = user_input
         st.session_state.analysis_count += 1
         
         with st.spinner("🤖 Analyzing article authenticity..."):
-            # Train the model and get the fitted vectorizer
-            fitted_vectorizer, clf = train_model(data, vectorizer, classifier)
+            # Train the model and get the fitted vectorizer and accuracy
+            fitted_vectorizer, clf, accuracy = train_model(data, vectorizer, classifier)
             
-            # Vectorize the user input
+            # Store accuracy
+            st.session_state.model_accuracy = accuracy
+            
+            # Vectorize the user input with the FITTED vectorizer
             input_vectorized = fitted_vectorizer.transform([st.session_state.user_input])
             
             # Predict the label of the input
             prediction = clf.predict(input_vectorized)
             
             # Store result in session state
-            st.session_state.result = int(prediction[0])
-
-    # Display the result if it exists in the session state
-    if st.session_state.result is not None and st.session_state.user_input:
-        st.markdown("---")
-        st.markdown("### 📋 Analysis Results")
-        
-        # Create result columns
-        result_col1, result_col2 = st.columns([1, 1])
-        
-        with result_col1:
-            if st.session_state.result == 1:
-                st.error("🚨 **FAKE NEWS DETECTED**\n\nThis article shows characteristics of misinformation.")
-            else:
-                st.success("✅ **AUTHENTIC ARTICLE**\n\nThis article appears to be legitimate news.")
-        
-        with result_col2:
-            confidence = 85 + (st.session_state.analysis_count % 15)  # Simulated confidence
-            st.metric(
-                label="Confidence Level",
-                value=f"{confidence}%",
-                delta=f"+{confidence-80}% vs baseline"
-            )
-
-        # Add enhanced analysis section with Gemini-powered insights
-        st.markdown("---")
-        st.markdown("### 🧠 Enhanced Analysis & Insights")
-        
-        # Initialize session state for enhanced analysis
-        if 'enhanced_analysis' not in st.session_state:
-            st.session_state.enhanced_analysis = None
-        
-        # Auto-generate enhanced analysis with Gemini
-        if st.session_state.enhanced_analysis is None:
-            with st.spinner("🧠 Generating enhanced insights..."):
-                try:
-                    # Create a specialized prompt for enhanced analysis
-                    ml_result = "FAKE NEWS" if st.session_state.result == 1 else "AUTHENTIC NEWS"
-                    confidence = 85 + (st.session_state.analysis_count % 15)
-                    
-                    enhanced_prompt = f"""As an expert fact-checker, analyze this news article that our ML model classified as {ml_result} with {confidence}% confidence.
-
-Article: "{st.session_state.user_input[:1200]}"
-
-Provide:
-DETAILED_BREAKDOWN: Specific analysis of why this might be {ml_result.lower()}, language patterns, credibility indicators
-EDUCATIONAL_INSIGHTS: Practical verification tips for this type of content
-CONTEXT_ANALYSIS: What to look for in similar articles"""
-
-                    print(f"Calling Gemini with enhanced prompt...")
-                    enhanced_result = analyze_text_with_gemini(enhanced_prompt)
-                    print(f"Enhanced result confidence: {enhanced_result.get('confidence_score', 0)}")
-                    
-                    st.session_state.enhanced_analysis = enhanced_result
-                    
-                    # Debug info
-                    if enhanced_result.get('confidence_score', 0) > 0:
-                        print("✅ Gemini analysis successful")
-                    else:
-                        print("❌ Gemini analysis failed, using fallback")
-                        
-                except Exception as e:
-                    print(f"Exception in enhanced analysis: {e}")
-                    # Fallback to static analysis if Gemini fails
-                    st.session_state.enhanced_analysis = {
-                        'analysis': f'Enhanced analysis error: {str(e)}',
-                        'confidence_score': 0.0,
-                        'educational_insight': 'Static educational content provided below.'
-                    }
-        
-        # Display enhanced analysis
-        analysis_col1, analysis_col2 = st.columns([1, 1])
-        
-        with analysis_col1:
-            st.markdown("#### 🔍 **AI-Powered Detailed Breakdown**")
-            
-            if st.session_state.enhanced_analysis and st.session_state.enhanced_analysis['confidence_score'] > 0:
-                # Parse Gemini response for detailed breakdown
-                analysis_text = st.session_state.enhanced_analysis['analysis']
-                if "DETAILED_BREAKDOWN:" in analysis_text:
-                    detailed_part = analysis_text.split("DETAILED_BREAKDOWN:")[1].split("EDUCATIONAL_INSIGHTS:")[0].strip()
-                    st.markdown(detailed_part)
-                else:
-                    st.markdown(analysis_text[:500] + "..." if len(analysis_text) > 500 else analysis_text)
-            else:
-                # Fallback static analysis
-                if st.session_state.result == 1:
-                    st.markdown("""
-                    **🚨 Potential Red Flags Detected:**
-                    - Language patterns consistent with misinformation
-                    - Statistical model confidence indicates suspicious content
-                    - Recommend fact-checking with reliable sources
-                    
-                    **⚠️ Warning Signs:**
-                    - Emotional or sensational language
-                    - Lack of credible source citations
-                    - Unusual writing patterns
-                    """)
-                else:
-                    st.markdown("""
-                    **✅ Credibility Indicators Found:**
-                    - Language patterns align with legitimate news
-                    - Statistical model shows high authenticity confidence
-                    - Content structure follows journalistic standards
-                    
-                    **📊 Positive Signs:**
-                    - Balanced and factual tone
-                    - Coherent narrative structure
-                    - Professional writing style
-                    """)
-        
-        with analysis_col2:
-            st.markdown("#### 🎓 **AI-Generated Educational Insights**")
-            
-            if st.session_state.enhanced_analysis and st.session_state.enhanced_analysis['confidence_score'] > 0:
-                # Parse Gemini response for educational insights
-                analysis_text = st.session_state.enhanced_analysis['analysis']
-                if "EDUCATIONAL_INSIGHTS:" in analysis_text:
-                    education_part = analysis_text.split("EDUCATIONAL_INSIGHTS:")[1].split("CONTEXT_ANALYSIS:")[0].strip()
-                    st.markdown(education_part)
-                else:
-                    st.markdown(st.session_state.enhanced_analysis['educational_insight'])
-            else:
-                # Fallback static content
-                st.markdown("""
-                **How to Spot Fake News:**
-                - Check multiple reliable sources
-                - Look for author credentials
-                - Verify publication date and context
-                - Be wary of emotional headlines
-                - Cross-reference with fact-checkers
-                
-                **Trusted Sources:**
-                - Reuters, AP News, BBC
-                - Snopes, FactCheck.org
-                - Local newspaper websites
-                - Government official sources
-                """)
-        
-        # Context Analysis Section
-        if st.session_state.enhanced_analysis and st.session_state.enhanced_analysis['confidence_score'] > 0:
-            analysis_text = st.session_state.enhanced_analysis['analysis']
-            if "CONTEXT_ANALYSIS:" in analysis_text:
-                context_part = analysis_text.split("CONTEXT_ANALYSIS:")[1].strip()
-                if context_part:
-                    st.markdown("#### 🌐 **Contextual Guidance**")
-                    st.info(context_part)
-        
-        # Refresh analysis button
-        if st.button("🔄 Regenerate Enhanced Analysis", key="refresh_analysis"):
-            st.session_state.enhanced_analysis = None
-            st.rerun()
-        
-        # Professional Gemini Analysis Section
-        st.markdown("---")
-        st.markdown("### 🚀 **Advanced Gemini AI Analysis**")
-        
-        gemini_col1, gemini_col2 = st.columns([3, 1])
-        
-        with gemini_col1:
-            st.info("🧠 **Get comprehensive AI-powered analysis** with detailed red flags detection, credibility assessment, and educational insights powered by Google Gemini AI.")
-        
-        with gemini_col2:
-            if st.button("🚀 **Analyze with Gemini AI**", key="professional_gemini_analysis", use_container_width=True):
-                with st.spinner("🧠 Running comprehensive AI analysis..."):
-                    if not st.session_state.user_input or len(st.session_state.user_input.strip()) < 10:
-                        st.warning("⚠️ Please enter at least 10 characters of text for Gemini analysis.")
-                    else:
-                        try:
-                            # Initialize Gemini Analyzer
-                            analyzer = GeminiAnalyzer()
-                            
-                            if hasattr(analyzer, 'is_configured') and analyzer.is_configured:
-                                # Get ML prediction context
-                                ml_prediction = "FAKE" if st.session_state.result == 1 else "REAL"
-                                
-                                # Run comprehensive analysis
-                                gemini_results = analyzer.analyze_text(
-                                    st.session_state.user_input, 
-                                    ml_prediction
-                                )
-                                
-                                # Display professional results
-                                st.success("✅ **Comprehensive Analysis Complete**")
-                                display_gemini_results(gemini_results)
-                                
-                            else:
-                                st.warning("⚠️ **Gemini API Configuration Issue**")
-                                st.info("Please check your API key configuration. The core ML analysis is still working perfectly!")
-                                
-                        except Exception as e:
-                            st.error(f"⚠️ **Analysis Error**: {str(e)}")
-                            st.info("The core fake news detection system continues to work perfectly. This is just an additional feature.")
-    
-    elif check_button and not user_input.strip():
-        st.warning("⚠️ Please enter some text to analyze!")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# Run the Streamlit app
-if __name__ == "__main__":
-    main()
-    
-    # Modern Footer
-    st.markdown("""
-    <div style="
-        margin-top: 4rem;
-        padding: 2rem;
-        text-align: center;
-        background: rgba(255, 255, 255, 0.05);
-        border-top: 1px solid rgba(0, 212, 255, 0.2);
-        border-radius: 20px 20px 0 0;
-    ">
-        <p style="
-            color: var(--light-blue);
-            font-size: 0.9rem;
-            margin: 0;
-        ">
-            🚀 <strong>Created with enthusiasm by hacktreet team</strong> | 
-            Powered by TRUTH-AI Technology | 
-            🛡️ Protecting truth in the digital age
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-##run with command streamlit run main.py --client.showErrorDetails=false to remove cache error message on streamlit interface
+            # prediction[0] will be 1 for FAKE, 0 for REAL
+            st.session_state.result = int(prediction
