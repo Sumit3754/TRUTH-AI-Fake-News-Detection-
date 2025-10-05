@@ -10,6 +10,23 @@ from typing import Dict, List, Optional
 import json
 import time
 
+# CRITICAL FIX: Cache the Gemini model initialization
+@st.cache_resource
+def _initialize_gemini_model(api_key: str):
+    """
+    Initialize and cache Gemini model to prevent re-initialization on every rerun
+    This is the KEY FIX for the API key error
+    """
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        print("✅ Successfully initialized Gemini 2.0 Flash model")
+        return model, True
+    except Exception as e:
+        print(f"❌ Failed to configure Gemini AI: {str(e)}")
+        return None, False
+
+
 class GeminiAnalyzer:
     """
     Google Gemini AI integration for advanced misinformation analysis
@@ -27,19 +44,15 @@ class GeminiAnalyzer:
         
         if not self.api_key:
             st.error("❌ Gemini API key not found! Please set GEMINI_API_KEY in environment variables.")
-            return
-            
-        try:
-            # Configure Gemini AI
-            genai.configure(api_key=self.api_key)
-            # Use the latest Gemini 2.0 Flash model
-            self.model = genai.GenerativeModel('gemini-2.0-flash')
-            self.is_configured = True
-            print("✅ Successfully initialized Gemini 2.0 Flash model")
-            
-        except Exception as e:
-            st.error(f"❌ Failed to configure Gemini AI: {str(e)}")
+            self.model = None
             self.is_configured = False
+            return
+        
+        # Use cached model initialization
+        self.model, self.is_configured = _initialize_gemini_model(self.api_key)
+        
+        if not self.is_configured:
+            st.error("❌ Failed to configure Gemini AI")
     
     def analyze_text(self, text: str, ml_prediction: str = None) -> Dict:
         """
@@ -354,15 +367,23 @@ def analyze_text_with_gemini(text: str) -> Dict:
             'educational_insight': 'Please configure Gemini API key'
         }
 
+
+@st.cache_resource
+def _get_configured_genai():
+    """Cache the genai configuration"""
+    api_key = os.getenv('GEMINI_API_KEY') or st.secrets.get('GEMINI_API_KEY')
+    if api_key:
+        genai.configure(api_key=api_key)
+        return True
+    return False
+
+
 def list_available_models():
     """List all available Gemini models"""
     try:
-        # Configure with API key
-        api_key = os.getenv('GEMINI_API_KEY') or st.secrets.get('GEMINI_API_KEY')
-        if not api_key:
+        if not _get_configured_genai():
             return False, "No API key found"
         
-        genai.configure(api_key=api_key)
         models = genai.list_models()
         
         available_models = []
@@ -373,6 +394,7 @@ def list_available_models():
         return True, available_models
     except Exception as e:
         return False, f"Error listing models: {str(e)}"
+
 
 def test_gemini_connection():
     """Test if Gemini API is working"""
