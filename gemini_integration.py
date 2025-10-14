@@ -19,7 +19,7 @@ def _initialize_gemini_model(api_key: str):
     """
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash-exp')
+        model = genai.GenerativeModel('gemini-2.0-flash')
         print("✅ Successfully initialized Gemini 2.0 Flash model")
         return model, True
     except Exception as e:
